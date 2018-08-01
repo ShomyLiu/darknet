@@ -1,5 +1,10 @@
+
+- reading videos from dir
+- save video detection results into dir
+
 # Yolo-v3 and Yolo-v2 for Windows and Linux
 ### (neural network for object detection)
+
 
 [![CircleCI](https://circleci.com/gh/AlexeyAB/darknet.svg?style=svg)](https://circleci.com/gh/AlexeyAB/darknet)
 
