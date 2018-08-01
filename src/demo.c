@@ -13,7 +13,12 @@
 #include "gettimeofday.h"
 #else
 #include <sys/time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
 #endif
+#include <string.h>
+#include <stdio.h>
 
 #define FRAMES 3
 
@@ -104,10 +109,10 @@ void *detect_in_thread(void *ptr)
     if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
 
 
-    printf("\033[2J");
-    printf("\033[1;1H");
-    printf("\nFPS:%.1f\n",fps);
-    printf("Objects:\n\n");
+    /* printf("\033[2J"); */
+    /* printf("\033[1;1H"); */
+    /* printf("\nFPS:%.1f\n",fps); */
+    /* printf("Objects:\n\n"); */
 
     ipl_images[demo_index] = det_img;
     det_img = ipl_images[(demo_index + FRAMES / 2 + 1) % FRAMES];
@@ -128,10 +133,12 @@ double get_wall_time()
     return (double)time.tv_sec + (double)time.tv_usec * .000001;
 }
 
+
 void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index, const char *filename, char **names, int classes,
-    int frame_skip, char *prefix, char *out_filename, int http_stream_port, int dont_show, int ext_output)
+    int frame_skip, char *prefix, char *ori_out_dir, int http_stream_port, int dont_show, int ext_output)
 {
-    //skip = frame_skip;
+    // filename:  the video dir
+    // ori_out_dir: the results  save dir
     image **alphabet = load_alphabet();
     int delay = frame_skip;
     demo_names = names;
@@ -148,13 +155,74 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     fuse_conv_batchnorm(net);
     srand(2222222);
 
-    if(filename){
-        printf("video file: %s\n", filename);
+    const int len_size = 100;
+
+
+    char single_name[len_size]; // the video filename in video dir;
+    char dir_video[len_size];  // a copy of video dir;
+    char  out_filename[len_size]; // the output filename of a video;
+
+    char input_dir[len_size], output_dir[len_size]; // update video input and output dir and end in '/'
+
+    strcpy(input_dir, filename);
+    strcpy(output_dir, ori_out_dir);
+
+    if(input_dir[strlen(input_dir) - 1] != '/'){
+        strcat(input_dir, "/");
+    }
+    if(output_dir[strlen(output_dir) - 1] != '/'){
+        strcat(output_dir, "/");
+    }
+
+    printf("*********************************\n");
+    printf("video input dir: %s;\nvideo output dir: %s;\nstart to detecting....\n", input_dir, output_dir);
+    strcpy(dir_video, input_dir);
+
+    // for list the dir;
+    DIR *dp;
+    struct dirent *ep;
+    dp = opendir(dir_video);
+
+    if(dp == NULL){
+        error("no video.\n");
+    }
+    else
+    while(ep = readdir(dp))
+    {
+        if(strlen(ep->d_name)<4){
+            continue;
+        }
+
+        printf("#################################\n");
+
+        // used for split the filename with '.'
+        char *prefix_name;   // prefix name of video
+        char *video_type;    //  the video type
+        char ori_file_name[len_size]; // a copy of the file name and used for split
+
+        strcpy(ori_file_name, ep->d_name);
+        prefix_name = strtok(ori_file_name, ".");
+        video_type = strtok(NULL, ".");
+
+        if(prefix_name == NULL || video_type == NULL){
+            error("video filename is not valid");
+        }
+
+        strcpy(single_name, input_dir);
+        strcat(single_name, ep->d_name);
+
+        strcpy(out_filename, output_dir);
+        strcat(out_filename, prefix_name);
+        strcat(out_filename, "_marked.mp4");
+
+
+    if(single_name){
+        printf("%s starts...\n", single_name);
 //#ifdef CV_VERSION_EPOCH    // OpenCV 2.x
 //        cap = cvCaptureFromFile(filename);
 //#else                    // OpenCV 3.x
         cpp_video_capture = 1;
-        cap = get_capture_video_stream(filename);
+        cap = get_capture_video_stream(single_name);
 //#endif
     }else{
         printf("Webcam index: %d\n", cam_index);
@@ -211,7 +279,6 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
         cvMoveWindow("Demo", 0, 0);
         cvResizeWindow("Demo", 1352, 1013);
     }
-
     CvVideoWriter* output_video_writer = NULL;    // cv::VideoWriter output_video;
     if (out_filename && !flag_exit)
     {
@@ -272,7 +339,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             // save video file
             if (output_video_writer && show_img) {
                 cvWriteFrame(output_video_writer, show_img);
-                printf("\n cvWriteFrame \n");
+                //printf("\n cvWriteFrame \n");
             }
 
             cvReleaseImage(&show_img);
@@ -313,25 +380,32 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     printf("input video stream closed. \n");
     if (output_video_writer) {
         cvReleaseVideoWriter(&output_video_writer);
-        printf("output_video_writer closed. \n");
+        printf("finished and saved in %s\n", out_filename);
+        printf("#################################\n");
     }
 
+    }
     // free memory
+    /* cvReleaseImage(&show_img); */
+    /* cvReleaseImage(&in_img); */
+    /* free_image(in_s); */
+
+    /* free(avg); */
+    /* for (j = 0; j < FRAMES; ++j) free(predictions[j]); */
+    /* for (j = 0; j < FRAMES; ++j) free_image(images[j]); */
+
+    /* for (j = 0; j < l.w*l.h*l.n; ++j) free(probs[j]); */
+    /* free(boxes); */
+    /* free(probs); */
+    (void) closedir(dp);
+
+    int i, j;
     cvReleaseImage(&show_img);
     cvReleaseImage(&in_img);
     free_image(in_s);
 
-    free(avg);
-    for (j = 0; j < FRAMES; ++j) free(predictions[j]);
-    for (j = 0; j < FRAMES; ++j) free_image(images[j]);
-
-    for (j = 0; j < l.w*l.h*l.n; ++j) free(probs[j]);
-    free(boxes);
-    free(probs);
 
     free_ptrs(names, net.layers[net.n - 1].classes);
-
-    int i;
     const int nsize = 8;
     for (j = 0; j < nsize; ++j) {
         for (i = 32; i < 127; ++i) {
@@ -340,7 +414,6 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
         free(alphabet[j]);
     }
     free(alphabet);
-
     free_network(net);
 }
 #else
